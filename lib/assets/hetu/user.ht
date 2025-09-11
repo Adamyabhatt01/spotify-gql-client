@@ -47,6 +47,15 @@ class SpotifyUserEndpoint {
 
       var pagingInfo = data["data"]["me"]["library"]["tracks"]["pagingInfo"]
 
+      if (onlyTrackIds.isEmpty) {
+        return {
+          offset: pagingInfo["offset"],
+          limit: pagingInfo["limit"],
+          total: data["data"]["me"]["library"]["tracks"]["totalCount"],
+          items: []
+        }.toJson()
+      }
+
       return this.apiClient.get_req(
         "/tracks", 
         queryParameters: {ids: onlyTrackIds.join(",")}.toJson()

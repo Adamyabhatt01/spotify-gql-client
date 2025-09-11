@@ -111,6 +111,10 @@ class SpotifySearchEndpoint {
       return track["uri"].split(":").last
     }).toList()
 
+    if(ids.isEmpty) {
+      return []
+    }
+
     return this.apiClient.get_req(
       "/tracks",
       queryParameters: {
