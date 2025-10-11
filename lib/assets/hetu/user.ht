@@ -206,7 +206,7 @@ class SpotifyUserEndpoint {
         return {
           offset: pagingInfo["offset"],
           limit: pagingInfo["limit"],
-          total: artistData["totalCount"],
+          total: albumsData["totalCount"],
           items: []
         }.toJson()
       }
