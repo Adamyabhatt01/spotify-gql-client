@@ -150,7 +150,7 @@ class SpotifySearchEndpoint {
         "extensions": {
           "persistedQuery": {
             "version": 1,
-            "sha256Hash": "d9f785900f0710b31c07818d617f4f7600c1e21217e80f5b043d1e78d74e6026"
+            "sha256Hash": "4801118d4a100f756e833d33984436a3899cff359c532f8fd3aaf174b60b3b49"
           }
         }
       }.toJson()
