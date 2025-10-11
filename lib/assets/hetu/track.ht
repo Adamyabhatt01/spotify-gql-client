@@ -55,7 +55,7 @@ class SpotifyTrackEndpoint {
         "variables": {
             "uris": trackIds.map((id) => "spotify:track:${id}").toList()
         },
-        "operationName": "removeToLibrary",
+        "operationName": "removeFromLibrary",
         "extensions": {
             "persistedQuery": {
                 "version": 1,
