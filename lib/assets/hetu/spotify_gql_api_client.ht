@@ -6,6 +6,7 @@ import { SpotifySearchEndpoint } from "search.ht"
 import { SpotifyTrackEndpoint } from "track.ht"
 import { SpotifyUserEndpoint } from "user.ht"
 import { SpotifyBrowseEndpoint } from "browse.ht"
+import { generateRandomUserAgent } from "utils.ht"
 
 var HttpClient = std.HttpClient
 var HttpBaseOptions = std.HttpBaseOptions
@@ -29,6 +30,7 @@ class SpotifyGqlApi {
   fun setAccessToken(accessToken: string) {
     var headers = Map()
     headers["Authorization"] = "Bearer ${accessToken}"
+    headers["User-Agent"] =  generateRandomUserAgent()
     
     this.apiClient = HttpClient(
       HttpBaseOptions(
