@@ -20,11 +20,11 @@ export default class SpotifyGqlApi {
   track!: SpotifyTrackEndpoint;
   user!: SpotifyUserEndpoint;
 
-  constructor(accessToken: string) {
+  constructor(accessToken?: string | null) {
     this.setAccessToken(accessToken);
   }
 
-  setAccessToken(accessToken: string) {
+  setAccessToken(accessToken: string | null | undefined) {
     const headers: Record<string, string | undefined> = {};
     headers["Authorization"] = `Bearer ${accessToken}`;
     headers["User-Agent"] = generateRandomUserAgent();

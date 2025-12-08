@@ -75,10 +75,10 @@ class SpotifyPlaylistEndpoint {
       public: isPublic,
       collaborative,
     }: {
-      name: string;
-      description?: string;
-      public?: boolean;
-      collaborative?: boolean;
+      name?: string | undefined;
+      description?: string | undefined;
+      public?: boolean | undefined;
+      collaborative?: boolean | undefined;
     }
   ): Promise<void> {
     if (!name || !playlistId) {
