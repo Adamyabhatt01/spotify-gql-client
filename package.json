@@ -25,7 +25,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@spotube-app/plugin": "github:KRTirtho/spotube-plugin",
     "ky": "^1.14.1"
   }
 }

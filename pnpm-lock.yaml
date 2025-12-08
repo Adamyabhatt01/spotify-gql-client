@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@spotube-app/plugin':
-        specifier: github:KRTirtho/spotube-plugin
-        version: https://codeload.github.com/KRTirtho/spotube-plugin/tar.gz/d60445f6bebb1d081366c5c52efd52dfcdc6e5ac
       ky:
         specifier: ^1.14.1
         version: 1.14.1
@@ -183,10 +180,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@spotube-app/plugin@https://codeload.github.com/KRTirtho/spotube-plugin/tar.gz/d60445f6bebb1d081366c5c52efd52dfcdc6e5ac':
-    resolution: {tarball: https://codeload.github.com/KRTirtho/spotube-plugin/tar.gz/d60445f6bebb1d081366c5c52efd52dfcdc6e5ac}
-    version: 0.1.0
-
   '@types/node@24.10.1':
     resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
 
@@ -302,8 +295,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.1':
     optional: true
-
-  '@spotube-app/plugin@https://codeload.github.com/KRTirtho/spotube-plugin/tar.gz/d60445f6bebb1d081366c5c52efd52dfcdc6e5ac': {}
 
   '@types/node@24.10.1':
     dependencies:
