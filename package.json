@@ -1,0 +1,31 @@
+{
+  "name": "spotify-gql-client",
+  "version": "0.1.0",
+  "description": "Spotify GraphQL Client for JavaScript",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "example": "node --env-file=.env --import tsx example/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "spotify",
+    "graphql",
+    "client",
+    "javascript",
+    "typescript"
+  ],
+  "author": "Sonic Liberation",
+  "license": "MIT",
+  "packageManager": "pnpm@10.20.0",
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@spotube-app/plugin": "github:KRTirtho/spotube-plugin",
+    "ky": "^1.14.1"
+  }
+}

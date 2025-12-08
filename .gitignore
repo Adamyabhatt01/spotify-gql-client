@@ -3,3 +3,7 @@
 .dart_tool/
 *.out
 **/.DS_Store
+/node_modules
+/dist
+**/.env
+example/**/*.json
