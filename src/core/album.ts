@@ -1,19 +1,19 @@
-import type { KyInstance } from "ky";
+import { HttpClient } from "./http-client.js"
 import { SpotifyError } from "./error.js";
 import type { Album, Page, SimplifiedAlbum, Track } from "../types/web-api.js";
 import type { GqlAlbum, GqlAlbumSimplified, GqlPage } from "../types/gql-api.js";
 
 class SpotifyAlbumEndpoint {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
-  constructor(apiClient: KyInstance, gqlClient: KyInstance) {
+  constructor(apiClient: HttpClient, gqlClient: HttpClient) {
     this.apiClient = apiClient;
     this.gqlClient = gqlClient;
   }
 
   async getAlbum(albumId: string): Promise<Album> {
-    const res = await this.apiClient.get(`albums/${albumId}`).json<any>();
+    const res = await this.apiClient.get(`albums/${albumId}`);
     SpotifyError.mayThrow(res);
     return res;
   }
@@ -24,21 +24,21 @@ class SpotifyAlbumEndpoint {
   ): Promise<Page<Track>> {
     const res = await this.apiClient
       .get(`albums/${albumId}/tracks`, {
-        searchParams: {
+        params: {
           offset,
           limit,
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     const ids = res.items.map((item: any) => item.id);
 
     const tracksRes = await this.apiClient
       .get("tracks", {
-        searchParams: { ids: ids.join(",") },
+        params: { ids: ids.join(",") },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(tracksRes);
     res.items = tracksRes.tracks;
@@ -53,8 +53,8 @@ class SpotifyAlbumEndpoint {
     GqlPage<GqlAlbum>
   > {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             offset,
             limit,
@@ -71,7 +71,7 @@ class SpotifyAlbumEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -122,8 +122,8 @@ class SpotifyAlbumEndpoint {
 
   async save(albumIds: string[]) {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             uris: albumIds.map((id) => `spotify:album:${id}`),
           },
@@ -137,7 +137,7 @@ class SpotifyAlbumEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
@@ -145,8 +145,8 @@ class SpotifyAlbumEndpoint {
 
   async unsave(albumIds: string[]) {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             uris: albumIds.map((id) => `spotify:album:${id}`),
           },
@@ -160,7 +160,7 @@ class SpotifyAlbumEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;

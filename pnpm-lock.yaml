@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      ky:
-        specifier: ^1.14.1
-        version: 1.14.1
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -196,10 +192,6 @@ packages:
   get-tsconfig@4.13.0:
     resolution: {integrity: sha512-1VKTZJCwBrvbd+Wn3AOgQP/2Av+TfTCOlE4AcRJE72W1ksZXbAx8PPBR9RzgTeSPzlPMHrbANMH3LbltH73wxQ==}
 
-  ky@1.14.1:
-    resolution: {integrity: sha512-hYje4L9JCmpEQBtudo+v52X5X8tgWXUYyPcxKSuxQNboqufecl9VMWjGiucAFH060AwPXHZuH+WB2rrqfkmafw==}
-    engines: {node: '>=18'}
-
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
 
@@ -335,8 +327,6 @@ snapshots:
   get-tsconfig@4.13.0:
     dependencies:
       resolve-pkg-maps: 1.0.0
-
-  ky@1.14.1: {}
 
   resolve-pkg-maps@1.0.0: {}
 

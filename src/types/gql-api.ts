@@ -1,4 +1,4 @@
-import type { Artist, ExternalUrls, Image } from "./web-api.js";
+import type { ExternalUrls, Image } from "./web-api.js";
 
 export interface GqlPage<T> {
   items: T[];

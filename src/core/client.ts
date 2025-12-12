@@ -6,11 +6,11 @@ import { SpotifyTrackEndpoint } from "./track.js";
 import { SpotifyUserEndpoint } from "./user.js";
 import { SpotifyBrowseEndpoint } from "./browse.js";
 import { generateRandomUserAgent } from "./utils.js";
-import ky, { type KyInstance } from "ky";
+import { HttpClient } from "./http-client.js";
 
 export default class SpotifyGqlApi {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
   album!: SpotifyAlbumEndpoint;
   artist!: SpotifyArtistEndpoint;
@@ -29,25 +29,13 @@ export default class SpotifyGqlApi {
     headers["Authorization"] = `Bearer ${accessToken}`;
     headers["User-Agent"] = generateRandomUserAgent();
 
-    this.apiClient = ky.extend({
+    this.apiClient = new HttpClient({
       headers: headers,
-      prefixUrl: "https://api.spotify.com/v1",
+      baseURL: "https://api.spotify.com/v1/",
     });
-    this.gqlClient = ky.extend({
-      prefixUrl: "https://api-partner.spotify.com/pathfinder/v2/query",
+    this.gqlClient = new HttpClient({
+      baseURL: "https://api-partner.spotify.com/pathfinder/v2/",
       headers: headers,
-      hooks: {
-        beforeRequest: [
-          (request) => {
-            const url = new URL(request.url);
-            if (url.pathname.endsWith("/")) {
-              url.pathname = url.pathname.slice(0, -1);
-              return new Request(url.toString(), request);
-            }
-            return request;
-          },
-        ],
-      },
     });
 
     this.album = new SpotifyAlbumEndpoint(this.apiClient, this.gqlClient);

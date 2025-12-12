@@ -1,4 +1,4 @@
-import type { KyInstance } from "ky";
+import { HttpClient } from "./http-client.js"
 import { SpotifyError } from "./error.js";
 import type {
   BrowseSectionItem,
@@ -11,10 +11,10 @@ import type {
 } from "../types/gql-api.js";
 
 class SpotifyBrowseEndpoint {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
-  constructor(apiClient: KyInstance, gqlClient: KyInstance) {
+  constructor(apiClient: HttpClient, gqlClient: HttpClient) {
     this.apiClient = apiClient;
     this.gqlClient = gqlClient;
   }
@@ -131,8 +131,8 @@ class SpotifyBrowseEndpoint {
     limit?: number;
   }): Promise<BrowseSectionItem[]> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             timeZone,
             sp_t: spTCookie,
@@ -149,7 +149,7 @@ class SpotifyBrowseEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -186,8 +186,8 @@ class SpotifyBrowseEndpoint {
     }
   ): Promise<GqlPage<BrowseSectionItem["items"][number]>> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             uri: `spotify:section:${id}`,
             timeZone,
@@ -206,7 +206,7 @@ class SpotifyBrowseEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 

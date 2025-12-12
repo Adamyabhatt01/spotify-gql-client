@@ -1,4 +1,4 @@
-import type { KyInstance } from "ky";
+import { HttpClient } from "./http-client.js"
 import { SpotifyError } from "./error.js";
 import type {
   GqlAlbum,
@@ -11,10 +11,10 @@ import type {
 import type { Track } from "../types/web-api.js";
 
 class SpotifySearchEndpoint {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
-  constructor(apiClient: KyInstance, gqlClient: KyInstance) {
+  constructor(apiClient: HttpClient, gqlClient: HttpClient) {
     this.apiClient = apiClient;
     this.gqlClient = gqlClient;
   }
@@ -142,11 +142,11 @@ class SpotifySearchEndpoint {
 
     const res = await this.apiClient
       .get("tracks", {
-        searchParams: {
+        params: {
           ids: ids.join(","),
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res.tracks as Track[];
@@ -166,8 +166,8 @@ class SpotifySearchEndpoint {
     tracks: Track[];
   }> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             searchTerm: query,
             offset,
@@ -189,7 +189,7 @@ class SpotifySearchEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -212,8 +212,8 @@ class SpotifySearchEndpoint {
     { offset = 0, limit = 20 }: { offset?: number; limit?: number } = {}
   ): Promise<GqlPage<GqlAlbum>> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             includePreReleases: false,
             numberOfTopResults: 20,
@@ -233,7 +233,7 @@ class SpotifySearchEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -254,8 +254,8 @@ class SpotifySearchEndpoint {
     { offset = 0, limit = 20 }: { offset?: number; limit?: number } = {}
   ): Promise<GqlPage<GqlArtist>> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             includePreReleases: false,
             numberOfTopResults: 20,
@@ -275,7 +275,7 @@ class SpotifySearchEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -296,8 +296,8 @@ class SpotifySearchEndpoint {
     { offset = 0, limit = 20 }: { offset?: number; limit?: number } = {}
   ): Promise<GqlPage<GqlPlaylistSimplified>> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             includePreReleases: false,
             numberOfTopResults: 20,
@@ -317,7 +317,7 @@ class SpotifySearchEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 
@@ -338,8 +338,8 @@ class SpotifySearchEndpoint {
     { offset = 0, limit = 20 }: { offset?: number; limit?: number } = {}
   ): Promise<GqlPage<Track>> {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             includePreReleases: false,
             numberOfTopResults: 20,
@@ -359,7 +359,7 @@ class SpotifySearchEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
 

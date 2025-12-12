@@ -1,26 +1,26 @@
-import type { KyInstance } from "ky";
+import { HttpClient } from "./http-client.js"
 import { SpotifyError } from "./error.js";
 import type { Track } from "../types/web-api.js";
 
 class SpotifyTrackEndpoint {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
-  constructor(apiClient: KyInstance, gqlClient: KyInstance) {
+  constructor(apiClient: HttpClient, gqlClient: HttpClient) {
     this.apiClient = apiClient;
     this.gqlClient = gqlClient;
   }
 
   async getTrack(trackId: string): Promise<Track> {
-    const res = await this.apiClient.get(`tracks/${trackId}`).json<any>();
+    const res = await this.apiClient.get(`tracks/${trackId}`);
     SpotifyError.mayThrow(res);
     return res;
   }
 
   async save(trackIds: string[]) {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             uris: trackIds.map((id) => `spotify:track:${id}`),
           },
@@ -34,7 +34,7 @@ class SpotifyTrackEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
@@ -42,8 +42,8 @@ class SpotifyTrackEndpoint {
 
   async unsave(trackIds: string[]) {
     const res = await this.gqlClient
-      .post("", {
-        json: {
+      .post("query", {
+        body: {
           variables: {
             uris: trackIds.map((id) => `spotify:track:${id}`),
           },
@@ -57,7 +57,7 @@ class SpotifyTrackEndpoint {
           },
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;

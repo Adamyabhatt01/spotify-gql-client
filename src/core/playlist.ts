@@ -1,18 +1,18 @@
-import type { KyInstance } from "ky";
+import { HttpClient } from "./http-client.js"
 import { SpotifyError } from "./error.js";
 import type { Page, Playlist, Track } from "../types/web-api.js";
 
 class SpotifyPlaylistEndpoint {
-  apiClient!: KyInstance;
-  gqlClient!: KyInstance;
+  apiClient!: HttpClient;
+  gqlClient!: HttpClient;
 
-  constructor(apiClient: KyInstance, gqlClient: KyInstance) {
+  constructor(apiClient: HttpClient, gqlClient: HttpClient) {
     this.apiClient = apiClient;
     this.gqlClient = gqlClient;
   }
 
   async getPlaylist(playlistId: string): Promise<Playlist> {
-    const res = await this.apiClient.get(`playlists/${playlistId}`).json<any>();
+    const res = await this.apiClient.get(`playlists/${playlistId}`);
     SpotifyError.mayThrow(res);
     return res;
   }
@@ -23,12 +23,12 @@ class SpotifyPlaylistEndpoint {
   ): Promise<Page<Track>> {
     const res = await this.apiClient
       .get(`playlists/${playlistId}/tracks`, {
-        searchParams: {
+        params: {
           offset,
           limit,
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
@@ -53,15 +53,14 @@ class SpotifyPlaylistEndpoint {
     }
 
     const res = await this.apiClient
-      .post(`users/${userId}/playlists`, {
-        json: {
+      .post<Playlist>(`users/${userId}/playlists`, {
+        body: {
           name,
           description,
           public: isPublic,
           collaborative,
         },
-      })
-      .json<Playlist>();
+      });
 
     SpotifyError.mayThrow(res);
     return res;
@@ -101,9 +100,9 @@ class SpotifyPlaylistEndpoint {
 
     const res = await this.apiClient
       .put(`playlists/${playlistId}`, {
-        json: data,
+        body: data,
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
   }
@@ -118,12 +117,12 @@ class SpotifyPlaylistEndpoint {
 
     const res = await this.apiClient
       .post(`playlists/${playlistId}/tracks`, {
-        json: {
+        body: {
           uris,
           position,
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
@@ -136,11 +135,11 @@ class SpotifyPlaylistEndpoint {
 
     const res = await this.apiClient
       .delete(`playlists/${playlistId}/tracks`, {
-        json: {
+        body: {
           tracks: uris.map((uri) => ({ uri })),
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
@@ -149,18 +148,18 @@ class SpotifyPlaylistEndpoint {
   async follow(playlistId: string) {
     const res = await this.apiClient
       .put(`playlists/${playlistId}/followers`, {
-        json: {
+        body: {
           public: false,
         },
       })
-      .json<any>();
+      ;
 
     SpotifyError.mayThrow(res);
     return res;
   }
 
   async unfollow(playlistId: string) {
-    const res = await this.apiClient.delete(`playlists/${playlistId}/followers`).json<any>();
+    const res = await this.apiClient.delete(`playlists/${playlistId}/followers`);
     SpotifyError.mayThrow(res);
     return res;
   }
