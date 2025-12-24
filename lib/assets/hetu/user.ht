@@ -11,7 +11,44 @@ class SpotifyUserEndpoint {
   construct (this.apiClient, this.gqlClient)
 
   fun me() {
-    return this.apiClient.get_req("/me").then((res: HttpResponse)=>res.data)
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": {},
+        "operationName": "profileAttributes",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced"
+          }
+        }
+      }.toJson()
+    ).then((res: HttpResponse){
+      var user = res.data["data"]["me"]["profile"]
+      var userId = user["uri"].split(":").last
+      return {
+        // "country": "string",
+        "display_name": user["name"],
+        "email": "unknown",
+        "explicit_content": {
+          "filter_enabled": false,
+          "filter_locked": false
+        },
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/${userId}"
+        },
+        "followers": {
+          "href": "https://api.spotify.com/v1/users/${userId}/followers",
+          "total": 0
+        },
+        "href": "https://api.spotify.com/v1/users/${userId}",
+        "id": userId,
+        "images": user["avatar"]?["sources"] ?? [],
+        // "product": "string",
+        "type": "user",
+        "uri": user["uri"],
+      }.toJson()
+    })
   }
 
   fun savedTracks({offset: int, limit: int}) {
