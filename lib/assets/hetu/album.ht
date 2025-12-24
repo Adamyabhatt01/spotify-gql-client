@@ -11,47 +11,147 @@ class SpotifyAlbumEndpoint {
   construct (this.apiClient, this.gqlClient)
 
   fun getAlbum(albumId: string) {
-    return this.apiClient.get_req("/albums/${albumId}").then((res: HttpResponse) {
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": {
+          "uri": "spotify:album:${albumId}",
+          "locale": "",
+          "offset": 0,
+          "limit": 50
+        },
+        "operationName": "getAlbum",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10"
+          }
+        }
+      }.toJson()
+    ).then((res: HttpResponse) {
       var data = res.data
 
       if (SpotifyError.isError(data)) {
         throw SpotifyError(data)
       }
 
-      return data
+      var album = data["data"]["albumUnion"]
+
+      return {
+        id: albumId,
+        name: album["name"],
+        album_type: album["type"]?.toLowerCase(),      
+        label: album["label"],
+        release_date: album["date"]?["isoString"],
+        release_date_precision: album["date"]?["precision"] ?? "day",
+        images: album["coverArt"]?["sources"],
+        external_urls: {
+          spotify: "https://open.spotify.com/album/${albumId}"
+        },
+        copyrights: album["copyrights"]?["copyright"] ?? [],
+        artists: album["artists"]?["items"]?.map((artist){
+          var id = artist["uri"].split(":").last
+          return {
+            id: id,
+            uri: artist["uri"],
+            name: artist["profile"]["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}"
+            },
+            images: artist["visuals"]?["avatarImage"]?["sources"] ?? []
+          }
+        }).toList() ?? []
+      }.toJson()
     })
   }
 
   fun tracks(albumId: string, {offset: int, limit: int}) {
-    return this.apiClient.get_req(
-      "/albums/${albumId}/tracks",
-      queryParameters: {
-        offset: offset ?? 0,
-        limit: limit ?? 20,
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": {
+          "uri": "spotify:album:${albumId}",
+          "locale": "",
+          "offset": offset ?? 0,
+          "limit": limit ?? 50
+        },
+        "operationName": "getAlbum",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10"
+          }
+        }
       }.toJson()
-    )
-    .then((res: HttpResponse) {
+    ).then((res: HttpResponse) {
       var data = res.data
 
       if (SpotifyError.isError(data)) {
         throw SpotifyError(data)
       }
-      var ids = data["items"].map((item)=>item["id"])
 
-      return this.apiClient.get_req(
-        "/tracks", 
-        queryParameters: {ids: ids.join(",")}.toJson()
-      ).then((res) {
-        var tracksData = res.data
+      var album = data["data"]["albumUnion"]
+      var trackAlbum = {
+        id: albumId,
+        name: album["name"],
+        album_type: album["type"]?.toLowerCase(),      
+        label: album["label"],
+        release_date: album["date"]?["isoString"],
+        release_date_precision: album["date"]?["precision"] ?? "day",
+        images: album["coverArt"]?["sources"],
+        external_urls: {
+          spotify: "https://open.spotify.com/album/${albumId}"
+        },
+        copyrights: album["copyrights"]?["copyright"] ?? [],
+        artists: album["artists"]?["items"]?.map((artist){
+          var id = artist["uri"].split(":").last
+          return {
+            id: id,
+            uri: artist["uri"],
+            name: artist["profile"]["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}"
+            },
+            images: artist["visuals"]?["avatarImage"]?["sources"] ?? []
+          }
+        }).toList() ?? []
+      }.toJson()
+      var tracks = album["tracksV2"]["items"]
 
-        if (SpotifyError.isError(tracksData)) {
-          throw SpotifyError(tracksData)
-        }
+      return {
+        href: "https://api.spotify.com/v1/albums/${albumId}/tracks?offset=${offset ?? 0}&limit=${limit ?? 20}",
+        limit: limit ?? 50,
+        offset: offset ?? 0,
+        total: album["tracksV2"]["totalCount"],
+        next: tracks.length < (limit ?? 50) ? "https://api.spotify.com/v1/albums/${albumId}/tracks?offset=${(offset ?? 0) + tracks.length}&limit=${limit ?? 50}" : null,
+        previous: offset != null && offset > 0 ? "https://api.spotify.com/v1/albums/${albumId}/tracks?offset=${Math.max(0, (offset ?? 0) - (limit ?? 50))}&limit=${limit ?? 50}" : null,
+        items: tracks.map((data){
+          var item = data["track"]
+          var trackArtists = item["artists"]?["items"]?.map((artist){
+            var id = artist["uri"].split(":").last
+            return {
+              id: id,
+              uri: artist["uri"],
+              name: artist["profile"]["name"],
+              external_urls: {
+                spotify: "https://open.spotify.com/artist/${id}",
+              },
+            }.toJson()
+          }).toList() ?? []
 
-        data["items"] = tracksData["tracks"]
-
-        return data
-      })
+          return {
+            id: item["uri"].split(":").last,
+            uri: item["uri"],
+            name: item["name"],
+            album: trackAlbum,
+            artists: trackArtists,
+            duration_ms: item["duration"]?["totalMilliseconds"],
+            external_urls: {
+              spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
+            },   
+          }.toJson()
+        })
+      }.toJson()
     })
   }
 

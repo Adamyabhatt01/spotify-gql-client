@@ -89,9 +89,9 @@ Future<void> runHetuSpotifyGqlApi() async {
     //   print('Get Playlist: ${item}')
     // })
 
-    // spotifyApi.playlist.tracks("3cEYpjA9oz9GiPac4AsH4n", offset: 1, limit: 10).then((item) {
-    //   print('Get Playlist Tracks: ${item}')
-    // })
+    spotifyApi.playlist.tracks("3cEYpjA9oz9GiPac4AsH4n", offset: 1, limit: 10).then((item) {
+      print('Get Playlist Tracks: ${item}')
+    })
 
     // spotifyApi.playlist.create(
     //   "<your user id>",

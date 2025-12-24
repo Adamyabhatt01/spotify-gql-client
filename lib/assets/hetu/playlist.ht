@@ -11,23 +11,22 @@ class SpotifyPlaylistEndpoint {
   construct (this.apiClient, this.gqlClient)
 
   fun getPlaylist(playlistId: string) {
-    return this.apiClient.get_req("/playlists/${playlistId}").then((res: HttpResponse) {
-      var data = res.data
-
-      if (SpotifyError.isError(data)) {
-        throw SpotifyError(data)
-      }
-
-      return data
-    })
-  }
-
-  fun tracks(playlistId: string, {offset: int, limit: int}) {    
-    return this.apiClient.get_req(
-      "/playlists/${playlistId}/tracks",
-      queryParameters: {
-        offset: offset ?? 0,
-        limit: limit ?? 20,
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": {
+          "uri": "spotify:playlist:${playlistId}",
+          "offset": 0,
+          "limit": 25,
+          "enableWatchFeedEntrypoint": true
+        },
+        "operationName": "fetchPlaylist",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "bb67e0af06e8d6f52b531f97468ee4acd44cd0f82b988e15c2ea47b1148efc77"
+          }
+        }
       }.toJson()
     ).then((res: HttpResponse) {
       var data = res.data
@@ -35,8 +34,106 @@ class SpotifyPlaylistEndpoint {
       if (SpotifyError.isError(data)) {
         throw SpotifyError(data)
       }
+      var playlist = data["data"]["playlistV2"]
+      var owner = playlist["ownerV2"]["data"]
 
-      return data
+      return {
+        id: playlistId,
+        collaborative: playlist["members"]["items"].length > 1,
+        description: playlist["description"],
+        external_urls: {
+          spotify: "https://open.spotify.com/playlist/${playlistId}"
+        },
+        followers: playlist["followers"],
+        name: playlist["name"],
+        images: playlist["images"]?["items"]?[0]?["sources"] ?? [],
+        public: true,
+        owner: {
+          id: owner["uri"].split(":").last,
+          external_urls: {
+            spotify: "https://open.spotify.com/user/${owner["uri"].split(":").last}"
+          },
+          type: "user",
+          uri: owner["uri"],
+          display_name: owner["name"],
+          images: owner["avatar"]?["sources"] ?? []
+        }
+      }.toJson()
+    })
+  }
+
+  fun tracks(playlistId: string, {offset: int, limit: int}) {    
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": {
+          "uri": "spotify:playlist:${playlistId}",
+          "offset": offset ?? 0,
+          "limit": limit ?? 25,
+          "enableWatchFeedEntrypoint": false
+        },
+        "operationName": "fetchPlaylist",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "bb67e0af06e8d6f52b531f97468ee4acd44cd0f82b988e15c2ea47b1148efc77"
+          }
+        }
+      }.toJson()
+    ).then((res: HttpResponse) {
+      var data = res.data
+
+      if (SpotifyError.isError(data)) {
+        throw SpotifyError(data)
+      }
+      var playlist = data["data"]["playlistV2"]
+      var owner = playlist["ownerV2"]["data"]
+      var tracks = playlist["content"]["items"].map((track){
+        var item = track["itemV2"]["data"]
+        var trackArtists = item["artists"]?["items"]?.map((artist){
+          var id = artist["uri"].split(":").last
+          return {
+            id: id,
+            uri: artist["uri"],
+            name: artist["profile"]["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}",
+            },
+          }.toJson()
+        }).toList() ?? []
+
+        return {
+          id: item["uri"].split(":").last,
+          uri: item["uri"],
+          name: item["name"],
+          album: {
+            album_type: "album",
+            id: item["albumOfTrack"]["id"],
+            name: item["albumOfTrack"]["name"],
+            images: item["albumOfTrack"]["coverArt"]?["sources"] ?? [],
+            external_urls: {
+              spotify: "https://open.spotify.com/album/${item["albumOfTrack"]["id"]}",
+            },
+            href: "https://api.spotify.com/v1/albums/${item["albumOfTrack"]["id"]}",
+            artists: [trackArtists[0]]
+          },
+          artists: trackArtists,
+          duration_ms: item["duration"]?["totalMilliseconds"],
+          external_urls: {
+            spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
+          },
+        }.toJson()
+      }).toList()
+
+      return {
+        href: "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${offset ?? 0}&limit=${limit ?? 20}",
+        limit: limit ?? 50,
+        offset: offset ?? 0,
+        total: playlist["content"]["totalCount"],
+        next: tracks.length < (limit ?? 50) ? "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${(offset ?? 0) + tracks.length}&limit=${limit ?? 50}" : null,
+        previous: offset != null && offset > 0 ? "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${Math.max(0, (offset ?? 0) - (limit ?? 50))}&limit=${limit ?? 50}" : null,
+        items: tracks,
+      }.toJson()
     })
   }
 

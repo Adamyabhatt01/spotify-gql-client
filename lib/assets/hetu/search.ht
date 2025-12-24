@@ -103,32 +103,47 @@ class SpotifySearchEndpoint {
   }
 
   fun convertTracks(tracks: List) {
-    var ids = tracks.where((item) => 
+    return tracks
+    .where((item) => 
       item["item"]["__typename"] == "TrackResponseWrapper"
       && item["item"]["data"]?["__typename"] == "Track"
-    ).map((data) {
-      var track = data["item"]["data"]
-      return track["uri"].split(":").last
-    }).toList()
+    )
+    .map((track){
+      var item = track["item"]["data"]
+      var trackArtists = item["artists"]?["items"]?.map((artist){
+        var id = artist["uri"].split(":").last
+        return {
+          id: id,
+          uri: artist["uri"],
+          name: artist["profile"]["name"],
+          external_urls: {
+            spotify: "https://open.spotify.com/artist/${id}",
+          },
+        }.toJson()
+      }).toList() ?? []
 
-    if(ids.isEmpty) {
-      return []
-    }
-
-    return this.apiClient.get_req(
-      "/tracks",
-      queryParameters: {
-        "ids": ids.join(","),
+      return {
+        id: item["uri"].split(":").last,
+        uri: item["uri"],
+        name: item["name"],
+        album: {
+          album_type: "album",
+          id: item["albumOfTrack"]["id"],
+          name: item["albumOfTrack"]["name"],
+          images: item["albumOfTrack"]["coverArt"]?["sources"] ?? [],
+          external_urls: {
+            spotify: "https://open.spotify.com/album/${item["albumOfTrack"]["id"]}",
+          },
+          href: "https://api.spotify.com/v1/albums/${item["albumOfTrack"]["id"]}",
+          artists: [trackArtists[0]]
+        },
+        artists: trackArtists,
+        duration_ms: item["duration"]?["totalMilliseconds"],
+        external_urls: {
+          spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
+        },
       }.toJson()
-    ).then((res){
-      var data = res.data
-
-      if(SpotifyError.isError(data)) {
-        throw SpotifyError(data)
-      }
-
-      return data["tracks"]
-    })
+    }).toList()
   }
 
   fun all(query: string, {offset: int, limit: int, topResults: int}) {
@@ -167,14 +182,12 @@ class SpotifySearchEndpoint {
       var playlists = this.convertPlaylists(searchData["playlists"]["items"])
       var tracks = this.convertTracks(searchData["tracksV2"]["items"])
 
-      return tracks.then((tracks){
-        return {
-          albums: albums,
-          artists: artists,
-          playlists: playlists,
-          tracks: tracks
-        }.toJson()
-      })
+      return {
+        albums: albums,
+        artists: artists,
+        playlists: playlists,
+        tracks: tracks
+      }.toJson()
     })
   }
 
@@ -345,14 +358,12 @@ class SpotifySearchEndpoint {
 
       var items = this.convertTracks(searchData["items"])
 
-      return items.then((items) {
-        return {
-          total: searchData["totalCount"],
-          limit: pagingInfo["limit"],
-          offset: pagingInfo["nextOffset"],
-          items: items,
-        }.toJson()
-      })
+      return {
+        total: searchData["totalCount"],
+        limit: pagingInfo["limit"],
+        offset: pagingInfo["nextOffset"],
+        items: items,
+      }.toJson()
     })
   }
 }
