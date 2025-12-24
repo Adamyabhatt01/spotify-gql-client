@@ -102,19 +102,21 @@ class SpotifyPlaylistEndpoint {
           }.toJson()
         }).toList() ?? []
 
+        var albumId = item["albumOfTrack"]["uri"].split(":").last
+
         return {
           id: item["uri"].split(":").last,
           uri: item["uri"],
           name: item["name"],
           album: {
             album_type: "album",
-            id: item["albumOfTrack"]["id"],
+            id: albumId,
             name: item["albumOfTrack"]["name"],
             images: item["albumOfTrack"]["coverArt"]?["sources"] ?? [],
             external_urls: {
-              spotify: "https://open.spotify.com/album/${item["albumOfTrack"]["id"]}",
+              spotify: "https://open.spotify.com/album/${albumId}",
             },
-            href: "https://api.spotify.com/v1/albums/${item["albumOfTrack"]["id"]}",
+            href: "https://api.spotify.com/v1/albums/${albumId}",
             artists: [trackArtists[0]]
           },
           artists: trackArtists,
