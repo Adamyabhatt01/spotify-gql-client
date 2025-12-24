@@ -37,36 +37,57 @@ class SpotifyUserEndpoint {
         throw SpotifyError(data)
       }
 
-      var trackData = data["data"]["me"]["library"]["tracks"]["items"]
-      
-      var onlyTrackIds = trackData.where(
-        (track: Map) => track["__typename"] == "UserLibraryTrackResponse"
-      )
-      .map((track: Map)=> track["track"]["_uri"].split(":").last)
-      .toList()
+      var library = data["data"]["me"]["library"]
+      var tracks = library["tracks"]["items"].map((track){
+        var id = track["track"]["_uri"].split(":").last
+        var item = track["track"]["data"]
+        var trackArtists = item["artists"]?["items"]?.map((artist){
+          var id = artist["uri"].split(":").last
+          return {
+            id: id,
+            uri: artist["uri"],
+            name: artist["profile"]["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}",
+            },
+          }.toJson()
+        }).toList() ?? []
 
-      var pagingInfo = data["data"]["me"]["library"]["tracks"]["pagingInfo"]
+        var albumId = item["albumOfTrack"]["uri"].split(":").last
 
-      if (onlyTrackIds.isEmpty) {
         return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: data["data"]["me"]["library"]["tracks"]["totalCount"],
-          items: []
+          id: id,
+          uri: item["uri"],
+          name: item["name"],
+          album: {
+            album_type: "album",
+            id: albumId,
+            name: item["albumOfTrack"]["name"],
+            images: item["albumOfTrack"]["coverArt"]?["sources"] ?? [],
+            external_urls: {
+              spotify: "https://open.spotify.com/album/${albumId}",
+            },
+            href: "https://api.spotify.com/v1/albums/${albumId}",
+            artists: [trackArtists[0]]
+          },
+          artists: trackArtists,
+          duration_ms: item["duration"]?["totalMilliseconds"],
+          external_urls: {
+            spotify: "https://open.spotify.com/track/${id}",
+          },
+          uri: "spotify:track:${id}",
         }.toJson()
-      }
+      }).toList()
 
-      return this.apiClient.get_req(
-        "/tracks", 
-        queryParameters: {ids: onlyTrackIds.join(",")}.toJson()
-      ).then((res: HttpResponse) {
-        return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: data["data"]["me"]["library"]["tracks"]["totalCount"],
-          items: res.data["tracks"],
-        }.toJson()
-      })
+      return {
+        href: "https://api.spotify.com/v1/me/tracks?offset=${offset ?? 0}&limit=${limit ?? 20}",
+        limit: limit ?? 50,
+        offset: offset ?? 0,
+        total: library["tracks"]["totalCount"],
+        next: tracks.length < (limit ?? 50) ? "https://api.spotify.com/v1/me/tracks?offset=${(offset ?? 0) + tracks.length}&limit=${limit ?? 50}" : null,
+        previous: offset != null && offset > 0 ? "https://api.spotify.com/v1/me/tracks?offset=${Math.max(0, (offset ?? 0) - (limit ?? 50))}&limit=${limit ?? 50}" : null,
+        items: tracks,
+      }.toJson()
     })
   }
 
