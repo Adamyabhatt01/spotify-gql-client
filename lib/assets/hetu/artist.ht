@@ -3,18 +3,42 @@ import { SpotifyError } from "error.ht"
 
 var HttpClient = std.HttpClient
 var HttpResponse = std.HttpResponse
+var DateTime = std.DateTime
+
+// Short-lived request-result cache for queryArtistOverview.
+// WHY A TTL CACHE AND NOT PURE IN-FLIGHT SHARING: Hetu 0.4.2 cannot catch
+// Future errors from script (Future.then drops the onError named argument),
+// so a failed in-flight entry could never be eagerly removed and would stay
+// permanently poisoned. The 10-second TTL bounds both failure sharing and
+// successful-result reuse instead. Entries are plain struct slots (HTStruct
+// has no key-removal API), so the map stays bounded by the distinct artist
+// URIs requested during the client lifetime. Artist overview data is
+// effectively static over this window.
+const overviewTtlMs = 10000
 
 class SpotifyArtistEndpoint {
   var apiClient: HttpClient
   var gqlClient: HttpClient
+  var overviewCache
 
-  construct (this.apiClient, this.gqlClient)
+  construct (this.apiClient, this.gqlClient) {
+    overviewCache = {}
+  }
 
-  fun getArtist(artistId: string) {
-    return this.gqlClient.post(
+  fun overviewFresh(at: int, nowMs: int) {
+    return nowMs - at < overviewTtlMs
+  }
+
+  fun overview(uri: string) {
+    var nowMs = DateTime.now().millisecondsSinceEpoch
+    var hit = overviewCache[uri]
+    if (hit != null && overviewFresh(hit['at'], nowMs)) {
+      return hit['future']
+    }
+    var future = this.gqlClient.post(
       "",
       data: {
-        "variables": { "uri": "spotify:artist:${artistId}", "locale": "" },
+        "variables": { "uri": uri, "locale": "" },
         "operationName": "queryArtistOverview",
         "extensions": {
           "persistedQuery": {
@@ -24,6 +48,12 @@ class SpotifyArtistEndpoint {
         }
       }.toJson()
     )
+    overviewCache[uri] = { future: future, at: nowMs }
+    return future
+  }
+
+  fun getArtist(artistId: string) {
+    return this.overview("spotify:artist:${artistId}")
       .then((res: HttpResponse){
         var data = res.data
 
@@ -54,19 +84,7 @@ class SpotifyArtistEndpoint {
   }
 
   fun topTracks(artistId: string, {limit: int, offset: int}) {
-    return this.gqlClient.post(
-      "",
-      data: {
-        "variables": { "uri": "spotify:artist:${artistId}", "locale": "" },
-        "operationName": "queryArtistOverview",
-        "extensions": {
-          "persistedQuery": {
-            "version": 1,
-            "sha256Hash": "446130b4a0aa6522a686aafccddb0ae849165b5e0436fd802f96e0243617b5d8"
-          }
-        }
-      }.toJson()
-    )
+    return this.overview("spotify:artist:${artistId}")
       .then((res: HttpResponse){
         var data = res.data
 
@@ -118,19 +136,7 @@ class SpotifyArtistEndpoint {
   }
 
   fun albums(artistId: string, {limit: int, offset: int}) {
-    return this.gqlClient.post(
-      "",
-      data: {
-        "variables": { "uri": "spotify:artist:${artistId}", "locale": "" },
-        "operationName": "queryArtistOverview",
-        "extensions": {
-          "persistedQuery": {
-            "version": 1,
-            "sha256Hash": "446130b4a0aa6522a686aafccddb0ae849165b5e0436fd802f96e0243617b5d8"
-          }
-        }
-      }.toJson()
-    )
+    return this.overview("spotify:artist:${artistId}")
       .then((res: HttpResponse){
         var data = res.data
 
