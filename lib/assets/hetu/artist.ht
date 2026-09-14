@@ -240,7 +240,23 @@ class SpotifyArtistEndpoint {
   }
 
   fun related(artistId: string) {
-    return this.apiClient.get_req("/artists/${artistId}/related-artists")
+    // GQL queryArtistRelated replaces the legacy REST
+    // GET /v1/artists/{id}/related-artists, which Spotify aggressively
+    // rate-limits (persistent 429s). Same partner-GQL transport as
+    // overview(); no retries, no credential changes.
+    return this.gqlClient.post(
+      "",
+      data: {
+        "variables": { "uri": "spotify:artist:${artistId}" },
+        "operationName": "queryArtistRelated",
+        "extensions": {
+          "persistedQuery": {
+            "version": 1,
+            "sha256Hash": "3d031d6cb22a2aa7c8d203d49b49df731f58b1e2799cc38d9876d58771aa66f3"
+          }
+        }
+      }.toJson()
+    )
       .then((res: HttpResponse){
         var data = res.data
 
@@ -248,7 +264,25 @@ class SpotifyArtistEndpoint {
           return SpotifyError(data)
         }
 
-        return data
+        // Adapter: GQL items -> the legacy REST shape the plugin's
+        // Converters.fullArtists already consumes. Only the fields
+        // Spotube actually uses are mapped; genres/followers are absent
+        // from the GQL response and are NOT fabricated.
+        var items = data["data"]["artistUnion"]["relatedContent"]["relatedArtists"]["items"]
+        var artists = items.map((artist){
+          var id = artist["id"]
+          var uri = artist["uri"] ?? "spotify:artist:${id}"
+          return {
+            id: id,
+            name: artist["profile"]?["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}"
+            },
+            images: artist["visuals"]?["avatarImage"]?["sources"] ?? []
+          }.toJson()
+        }).toList()
+
+        return { artists: artists }.toJson()
       })
   }
 }
