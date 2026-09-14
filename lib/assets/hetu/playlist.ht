@@ -88,7 +88,13 @@ class SpotifyPlaylistEndpoint {
       }
       var playlist = data["data"]["playlistV2"]
       var owner = playlist["ownerV2"]["data"]
-      var tracks = playlist["content"]["items"].map((track){
+      // Empty/unavailable playlists omit `content` (or its `items`) — treat
+      // as zero tracks. Entries with null `itemV2.data` are non-track items
+      // (episodes, local/filtered) — skip them rather than fabricate a track
+      // or crash on the artists/albumOfTrack dereferences below.
+      var tracks = (playlist["content"]?["items"] ?? []).where((track) {
+        return track["itemV2"]?["data"] != null
+      }).map((track){
         var item = track["itemV2"]["data"]
         var trackArtists = item["artists"]?["items"]?.map((artist){
           var id = artist["uri"].split(":").last
@@ -131,7 +137,7 @@ class SpotifyPlaylistEndpoint {
         href: "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${offset ?? 0}&limit=${limit ?? 20}",
         limit: limit ?? 50,
         offset: offset ?? 0,
-        total: playlist["content"]["totalCount"],
+        total: (playlist["content"]?["totalCount"] ?? 0),
         next: tracks.length < (limit ?? 50) ? "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${(offset ?? 0) + tracks.length}&limit=${limit ?? 50}" : null,
         previous: offset != null && offset > 0 ? "https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=${Math.max(0, (offset ?? 0) - (limit ?? 50))}&limit=${limit ?? 50}" : null,
         items: tracks,
