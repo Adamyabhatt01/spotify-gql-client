@@ -252,40 +252,46 @@ class SpotifyUserEndpoint {
       var albumsData = data["data"]["me"]["libraryV3"]
       var pagingInfo = albumsData["pagingInfo"]
 
-      var ids = albumsData["items"]
+      var items = albumsData["items"]
         .where((item) => 
           item["item"]["__typename"] == "AlbumResponseWrapper" 
           && item["item"]["data"]["__typename"] == "Album"
         )
-        .map((item) => item["item"]["_uri"].split(":").last)
-        .toList()
+        .map((item) {
+          var album = item["item"]["data"]
+          var id = item["item"]["_uri"].split(":").last
 
-      if (ids.isEmpty) {
-        return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: albumsData["totalCount"],
-          items: []
-        }.toJson()
-      }
+          return {
+            id: id,
+            uri: item["item"]["_uri"],
+            name: album["name"],
+            album_type: album["albumType"]?.toLowerCase(),
+            release_date: album["date"]?["year"]?.toString(),
+            release_date_precision: "year",
+            external_urls: {
+              spotify: "https://open.spotify.com/album/${id}",
+            },
+            images: album["coverArt"]?["sources"] ?? [],
+            artists: album["artists"]?["items"]?.map((artist){
+              var artistId = artist["uri"].split(":").last
+              return {
+                id: artistId,
+                uri: artist["uri"],
+                name: artist["profile"]["name"],
+                external_urls: {
+                  spotify: "https://open.spotify.com/artist/${artistId}",
+                },
+              }
+            }).toList() ?? [],
+          }.toJson()
+        }).toList()
 
-      return this.apiClient.get_req(
-        "/albums",
-        queryParameters: {ids: ids.join(",")}.toJson()
-      ).then((res: HttpResponse) {
-        var data = res.data
-
-        if (SpotifyError.isError(data)) {
-          throw SpotifyError(data)
-        }
-
-        return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: albumsData["totalCount"],
-          items: res.data["albums"]
-        }
-      })
+      return {
+        offset: pagingInfo["offset"],
+        limit: pagingInfo["limit"],
+        total: albumsData["totalCount"],
+        items: items,
+      }.toJson()
     })
   }
 
@@ -330,40 +336,32 @@ class SpotifyUserEndpoint {
       var artistData = data["data"]["me"]["libraryV3"]
       var pagingInfo = artistData["pagingInfo"]
 
-      var ids = artistData["items"]
+      var items = artistData["items"]
         .where((item) => 
           item["item"]["__typename"] == "ArtistResponseWrapper" 
           && item["item"]["data"]["__typename"] == "Artist"
         )
-        .map((item) => item["item"]["_uri"].split(":").last)
-        .toList()
+        .map((item) {
+          var artist = item["item"]["data"]
+          var id = item["item"]["_uri"].split(":").last
 
-      if (ids.isEmpty) {
-        return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: artistData["totalCount"],
-          items: []
-        }.toJson()
-      }
+          return {
+            id: id,
+            uri: item["item"]["_uri"],
+            name: artist["profile"]?["name"] ?? artist["name"],
+            external_urls: {
+              spotify: "https://open.spotify.com/artist/${id}",
+            },
+            images: artist["visuals"]?["avatarImage"]?["sources"] ?? [],
+          }.toJson()
+        }).toList()
 
-      return this.apiClient.get_req(
-        "/artists",
-        queryParameters: {ids: ids.join(",")}.toJson()
-      ).then((res: HttpResponse) {
-        var data = res.data
-
-        if (SpotifyError.isError(data)) {
-          throw SpotifyError(data)
-        }
-
-        return {
-          offset: pagingInfo["offset"],
-          limit: pagingInfo["limit"],
-          total: artistData["totalCount"],
-          items: res.data["artists"]
-        }
-      })
+      return {
+        offset: pagingInfo["offset"],
+        limit: pagingInfo["limit"],
+        total: artistData["totalCount"],
+        items: items,
+      }.toJson()
     })
   }
 
