@@ -126,7 +126,12 @@ class SpotifyPlaylistEndpoint {
             artists: [trackArtists[0]]
           },
           artists: trackArtists,
-          duration_ms: item["duration"]?["totalMilliseconds"],
+          // fetchPlaylist selects the length as `trackDuration`; the other
+          // overview operations select `duration`. A miss is silent: the
+          // converter does `?? 0`, so the row renders as 0:00.
+          duration_ms: item["duration"]?["totalMilliseconds"] ??
+              item["trackDuration"]?["totalMilliseconds"] ??
+              item["duration_ms"],
           external_urls: {
             spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
           },

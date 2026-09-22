@@ -3,6 +3,7 @@ import { SpotifyError } from "error.ht"
 
 var HttpClient = std.HttpClient
 var HttpResponse = std.HttpResponse
+var RequestOptions = std.RequestOptions
 var DateTime = std.DateTime
 
 // Short-lived request-result cache for queryArtistOverview.
@@ -16,17 +17,36 @@ var DateTime = std.DateTime
 // effectively static over this window.
 const overviewTtlMs = 10000
 
+// Album id -> title, learned from the discography selection or a batch that
+// got through. Bounded by resetting; see rememberAlbumName.
+const albumNamesMax = 600
+
+// How long a rejected answer keeps this plugin off api.spotify.com/v1. The
+// REST bucket is the one Spotify 429s (the pathfinder GQL quota is separate),
+// and the host's rate-limit gate cannot see a request made from inside this
+// VM — so the plugin has to stop paying for a call that is not getting
+// through, instead of retrying it on every artist page.
+const albumBatchCooldownMs = 300000
+
 class SpotifyArtistEndpoint {
   var apiClient: HttpClient
   var gqlClient: HttpClient
   var overviewCache
+  var albumNames
+  var albumBatch
 
   construct (this.apiClient, this.gqlClient) {
     overviewCache = {}
+    albumNames = {}
+    albumBatch = {}
   }
 
   fun overviewFresh(at: int, nowMs: int) {
     return nowMs - at < overviewTtlMs
+  }
+
+  fun batchAllowed(nowMs: int) {
+    return nowMs >= (albumBatch["blockedUntil"] ?? 0)
   }
 
   fun overview(uri: string) {
@@ -115,7 +135,7 @@ class SpotifyArtistEndpoint {
             album: {
               album_type: "album",
               id: albumId,
-              name: item["albumOfTrack"]?["name"] ?? "unknown",
+              name: item["albumOfTrack"]?["name"] ?? "",
               images: item["albumOfTrack"]["coverArt"]?["sources"] ?? [],
               external_urls: {
                 spotify: "https://open.spotify.com/album/${albumId}",
@@ -129,10 +149,108 @@ class SpotifyArtistEndpoint {
               spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
             },
           }.toJson()
-        })
+        }).toList()
 
-        return { tracks: topTracks }.toJson()
+        // queryArtistOverview's albumOfTrack selection carries uri and coverArt
+        // but no title. The titles are in the very same response, under the
+        // artist's discography groups, so a page normally resolves without a
+        // request; the Web API batch is only for albums that selection omits
+        // (soundtracks, various-artist compilations). validateStatus is
+        // permissive on purpose: Hetu 0.4.2 cannot catch a rejected future in
+        // script, so a 429 has to resolve and be judged here rather than take
+        // the section down with it.
+        var nameById = this.discographyNames(artist["discography"])
+        var missingIds = []
+        for (int i = 0; i < topTracks.length; i++) {
+          var row = topTracks[i]["album"]
+          if (row["name"] == "") {
+            if (nameById[row["id"]] != null) {
+              row["name"] = nameById[row["id"]]
+            } else if (albumNames[row["id"]] != null) {
+              row["name"] = albumNames[row["id"]]
+            } else if (!missingIds.contains(row["id"])) {
+              missingIds.add(row["id"])
+            }
+          }
+        }
+
+        if (missingIds.isEmpty) {
+          return { tracks: topTracks }.toJson()
+        }
+
+        var nowMs = DateTime.now().millisecondsSinceEpoch
+        if (!this.batchAllowed(nowMs)) {
+          return { tracks: topTracks }.toJson()
+        }
+
+        // Spotify's batch endpoint caps `ids` at 90; the host asks for 10-20
+        // tracks, so this only bounds a future caller that asks for more.
+        if (missingIds.length > 90) {
+          missingIds = missingIds.sublist(0, 90)
+        }
+
+        return this.apiClient.get_req(
+          "/albums",
+          queryParameters: { ids: missingIds.join(",") }.toJson(),
+          options: RequestOptions(validateStatus: (code) { return true }),
+        ).then((albumRes: HttpResponse) {
+          var payload = albumRes.statusCode == 200 ? albumRes.data : null
+
+          if (payload is Map && payload["albums"] is List) {
+            var albums = payload["albums"]
+            for (int i = 0; i < albums.length; i++) {
+              var entry = albums[i]
+              if (entry != null && entry["id"] != null && entry["name"] != null) {
+                this.rememberAlbumName(entry["id"], entry["name"])
+              }
+            }
+            for (int i = 0; i < topTracks.length; i++) {
+              var row = topTracks[i]["album"]
+              if (row["name"] == "" && albumNames[row["id"]] != null) {
+                row["name"] = albumNames[row["id"]]
+              }
+            }
+          } else {
+            // Nothing usable came back — a 429, a refused token, or a body
+            // without an albums list. All three look the same from here and
+            // none of them get better by asking again for the next artist.
+            albumBatch["blockedUntil"] = nowMs + albumBatchCooldownMs
+          }
+
+          return { tracks: topTracks }.toJson()
+        })
       })
+  }
+
+  fun discographyNames(discography) {
+    var nameById = {}
+    if (discography == null) {
+      return nameById
+    }
+    for (var group in ["albums", "singles", "compilations"]) {
+      var items = discography[group]?["items"] ?? []
+      for (var entry in items) {
+        var releases = entry["releases"]?["items"]
+        if (releases != null && releases.length > 0) {
+          var release = releases[0]
+          if (release["uri"] != null) {
+            nameById[release["uri"].split(":").last] = release["name"]
+          }
+        }
+      }
+    }
+    return nameById
+  }
+
+  fun rememberAlbumName(id, name) {
+    // Titles do not change, so an answer outlives the artist that surfaced
+    // one and the next page does not re-ask for it. This is the only
+    // unbounded structure in the module, so it is reset rather than evicted
+    // key by key (HTStruct has no key removal).
+    if (albumNames.length >= albumNamesMax) {
+      albumNames = {}
+    }
+    albumNames[id] = name
   }
 
   fun albums(artistId: string, {limit: int, offset: int}) {
