@@ -52,12 +52,20 @@ Future<dynamic> _runDriver(Hetu hetu, String name, String body) async {
 }
 
 // Real GQL item shape (playlistV2): track entry with itemV2.data present.
-Map<String, dynamic> _trackEntry(String n) => {
+// [durationKey]/[durationValue] pick which spelling of the track length the
+// payload carries: overview operations select `duration`, others select
+// `trackDuration`, the REST shape uses a flat `duration_ms`.
+Map<String, dynamic> _trackEntry(
+  String n, {
+  String durationKey = 'duration',
+  Object durationValue = const {'totalMilliseconds': 180000},
+}) =>
+    {
       'itemV2': {
         'data': {
           'uri': 'spotify:track:track$n',
           'name': 'Track $n',
-          'duration': {'totalMilliseconds': 180000},
+          durationKey: durationValue,
           'artists': {
             'items': [
               {
@@ -89,6 +97,32 @@ var stubGql = {
 }
 var ep = SpotifyPlaylistEndpoint(null, stubGql)
 ''';
+
+// Runs the real playlist.ht `tracks()` over a single-item payload and returns
+// the converted track map.
+Future<Map> _firstTrackItem(Object itemV2) async {
+  final hetu = await _newInterpreter();
+  final result = await _runDriver(
+    hetu,
+    'duration',
+    '''
+${_stub('''{ playlistV2: {
+  ownerV2: { data: {} },
+  content: { totalCount: 1, items: [ { itemV2: ${jsonEncode(itemV2)} } ] }
+} }''')}
+fun run() {
+  return ep.tracks('pl1').then((data) {
+    return data
+  })
+}
+''',
+  );
+  final out =
+      result is Map ? result : (result as dynamic).toJson() as Map;
+  final items = out['items'] as List;
+  expect(items, hasLength(1));
+  return items.first as Map;
+}
 
 void main() {
   test('null content yields zero tracks instead of throwing', () async {
@@ -209,7 +243,33 @@ fun run() {
     final track = items[0] as Map;
     expect(track['name'], 'Track 7');
     expect(track['uri'], 'spotify:track:track7');
+    expect(track['duration_ms'], 180000);
     expect((track['album'] as Map)['name'], 'Album 7');
     expect(((track['artists'] as List)[0] as Map)['name'], 'Artist 7');
+  });
+
+  group('track length spelling', () {
+    // Every spelling the payload can carry must land in `duration_ms`; a miss
+    // is silent downstream because the plugin converter does `?? 0`, which is
+    // what renders as 0:00 in the host.
+    for (final (key, value) in [
+      ('duration', {'totalMilliseconds': 180000}),
+      ('trackDuration', {'totalMilliseconds': 180000}),
+      ('duration_ms', 180000),
+    ]) {
+      test('$key is read', () async {
+        final item = await _firstTrackItem(
+            _trackEntry('3', durationKey: key, durationValue: value)['itemV2']!);
+        expect(item['duration_ms'], 180000);
+      });
+    }
+
+    test('absent yields null, which the converter turns into 0:00', () async {
+      final entry = _trackEntry('3');
+      (entry['itemV2']!['data'] as Map).remove('duration');
+      final item = await _firstTrackItem(entry['itemV2']!);
+      expect(item['duration_ms'], isNull,
+          reason: 'no spelling present -> null, defaulted by the converter');
+    });
   });
 }
