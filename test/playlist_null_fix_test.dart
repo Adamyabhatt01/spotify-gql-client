@@ -1,14 +1,21 @@
-// Regression tests for the playlist null-surface fix
+// Regression tests for the playlist track-shape fix
 // (lib/assets/hetu/playlist.ht, fetchPlaylist/tracks parsing).
 //
-// Two surfaces fixed:
+// Surfaces covered:
 // 1. empty/unavailable playlists omit `content` or `content.items`
 //    -> zero tracks instead of a null-dereference throw;
-// 2. `itemV2.data` is null for non-track entries (episodes, filtered)
-//    -> skipped instead of crashing on artists/albumOfTrack.
+// 2. entries with null `itemV2.data` (local/filtered) or a null entry itself
+//    -> skipped instead of crashing on the first subscript;
+// 3. episodes resolve `itemV2.data` to a *non-null* Episode object, so a null
+//    check is not enough: the filter discriminates on the `spotify:track`
+//    uri prefix, and the map body degrades (skip) on a missing album uri or
+//    empty artists instead of throwing. A single episode used to reject the
+//    whole tracks() future, returning nothing for the playlist.
 //
 // The real playlist.ht runs in Hetu with the real hetu_std bytecode
-// module; only the GQL HttpClient is stubbed. Run with `flutter test`.
+// module; only the GQL HttpClient is stubbed. Run from the package root
+// with `flutter test` — `dart test` cannot compile this package's Flutter
+// dependencies.
 
 import 'dart:convert';
 import 'dart:io';
@@ -17,8 +24,11 @@ import 'package:hetu_script/hetu_script.dart';
 import 'package:hetu_std/hetu_std.dart';
 import 'package:test/test.dart';
 
-const _hetuDir =
-    '/home/adamya/projects/hetu_spotify_gql_client/lib/assets/hetu';
+// Resolved against the package root (the test runner's cwd) at runtime —
+// never a machine-specific absolute path. Absolute form matters: the
+// driver's bare `import ... from "playlist.ht"` resolves relative to the
+// importing file, so a relative base breaks module resolution.
+String get _hetuDir => Directory('lib/assets/hetu').absolute.path;
 
 Future<Hetu> _newInterpreter() async {
   final hetu = Hetu();
@@ -86,6 +96,47 @@ Map<String, dynamic> _trackEntry(
         },
       },
     };
+
+// Episode-shaped entry: itemV2.data is NON-NULL (an Episode object carries
+// no artists/albumOfTrack). This is the shape that sailed through the old
+// `data != null` filter and crashed the map body at albumOfTrack.
+Map<String, dynamic> _episodeEntry(String n) => {
+      'itemV2': {
+        'data': {
+          'uri': 'spotify:episode:ep$n',
+          'name': 'Episode $n',
+          'duration': {'totalMilliseconds': 3600000},
+        },
+      },
+    };
+
+// Runs the real playlist.ht `tracks()` over a raw items list (entries may be
+// track maps, episode maps, null-data maps or nulls) and returns the
+// converted items. Must not throw for any mixture.
+Future<List> _trackItems(List<Object?> rawItems, String driver) async {
+  final hetu = await _newInterpreter();
+  final result = await _runDriver(
+    hetu,
+    driver,
+    '''
+${_stub('''{ playlistV2: {
+  ownerV2: { data: {} },
+  content: {
+    totalCount: ${rawItems.length},
+    items: [${rawItems.map(jsonEncode).join(', ')}]
+  }
+} }''')}
+fun run() {
+  return ep.tracks('pl1').then((data) {
+    return data
+  })
+}
+''',
+  );
+  final out =
+      result is Map ? result : (result as dynamic).toJson() as Map;
+  return out['items'] as List;
+}
 
 String _stub(String bodyHetu) => '''
 var calls = []
@@ -211,6 +262,41 @@ fun run() {
     expect((items[0] as Map)['name'], 'Track 1');
     expect((items[1] as Map)['name'], 'Track 2');
     expect(out['total'], 3);
+  });
+
+  test('episode-shaped entries are skipped without throwing', () async {
+    // An episode resolves itemV2.data to a non-null Episode object (no
+    // artists/albumOfTrack). The old `data != null` filter let it through
+    // and the map body threw at albumOfTrack, rejecting the whole page.
+    final items = await _trackItems(
+      [_trackEntry('1'), _episodeEntry('9'), _trackEntry('2')],
+      'episodes',
+    );
+    expect(items, hasLength(2),
+        reason: 'episodes must be skipped, not crash the page');
+    expect((items[0] as Map)['name'], 'Track 1');
+    expect((items[1] as Map)['name'], 'Track 2');
+  });
+
+  test('null entries are skipped without throwing', () async {
+    final items = await _trackItems(
+      [null, _trackEntry('1'), null],
+      'nullentries',
+    );
+    expect(items, hasLength(1));
+    expect((items[0] as Map)['name'], 'Track 1');
+  });
+
+  test('malformed track without album is skipped without throwing',
+      () async {
+    final entry = _trackEntry('5');
+    (entry['itemV2']!['data'] as Map).remove('albumOfTrack');
+    final items = await _trackItems(
+      [entry, _trackEntry('6')],
+      'noalbum',
+    );
+    expect(items, hasLength(1));
+    expect((items[0] as Map)['name'], 'Track 6');
   });
 
   test('all-valid playlist converts unchanged', () async {

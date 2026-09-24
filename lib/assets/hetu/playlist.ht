@@ -89,11 +89,15 @@ class SpotifyPlaylistEndpoint {
       var playlist = data["data"]["playlistV2"]
       var owner = playlist["ownerV2"]["data"]
       // Empty/unavailable playlists omit `content` (or its `items`) — treat
-      // as zero tracks. Entries with null `itemV2.data` are non-track items
-      // (episodes, local/filtered) — skip them rather than fabricate a track
-      // or crash on the artists/albumOfTrack dereferences below.
+      // as zero tracks. Only Track-shaped entries pass: episodes resolve
+      // `itemV2.data` to a *non-null* Episode object, so a null check is not
+      // enough — discriminate on the `spotify:track` uri prefix. Local and
+      // filtered rows (null data or null uri) fail the same predicate.
+      // Skipped entries never reach the Track-only dereferences below; a
+      // single episode used to reject the whole tracks() future instead.
       var tracks = (playlist["content"]?["items"] ?? []).where((track) {
-        return track["itemV2"]?["data"] != null
+        var data = track != null ? track["itemV2"]?["data"] : null
+        return data != null && (data["uri"] ?? "").startsWith("spotify:track")
       }).map((track){
         var item = track["itemV2"]["data"]
         var trackArtists = item["artists"]?["items"]?.map((artist){
@@ -108,7 +112,12 @@ class SpotifyPlaylistEndpoint {
           }.toJson()
         }).toList() ?? []
 
-        var albumId = item["albumOfTrack"]["uri"].split(":").last
+        // A malformed track (no album uri, no artists) degrades to a skip
+        // rather than killing the page — same policy as non-track entries.
+        var albumUri = item["albumOfTrack"]?["uri"]
+        if (albumUri == null || trackArtists.length == 0) return null
+
+        var albumId = albumUri.split(":").last
 
         return {
           id: item["uri"].split(":").last,
@@ -136,6 +145,8 @@ class SpotifyPlaylistEndpoint {
             spotify: "https://open.spotify.com/track/${item["uri"].split(":").last}",
           },
         }.toJson()
+      }).where((converted) {
+        return converted != null
       }).toList()
 
       return {
