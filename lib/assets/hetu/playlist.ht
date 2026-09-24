@@ -100,7 +100,15 @@ class SpotifyPlaylistEndpoint {
         return data != null && (data["uri"] ?? "").startsWith("spotify:track")
       }).map((track){
         var item = track["itemV2"]["data"]
-        var trackArtists = item["artists"]?["items"]?.map((artist){
+        // This map runs before the track-level guards below, so a throw here
+        // rejected the whole page exactly like the episode case. A Track always
+        // selects artists.items, but a row can still carry a null entry or one
+        // without a uri/profile — drop those and keep the track. If nothing
+        // survives, trackArtists is empty and the track is skipped below.
+        var trackArtists = (item["artists"]?["items"] ?? []).where((artist) {
+          return artist != null && artist["uri"] != null &&
+              artist["profile"]?["name"] != null
+        }).map((artist){
           var id = artist["uri"].split(":").last
           return {
             id: id,
@@ -110,7 +118,7 @@ class SpotifyPlaylistEndpoint {
               spotify: "https://open.spotify.com/artist/${id}",
             },
           }.toJson()
-        }).toList() ?? []
+        }).toList()
 
         // A malformed track (no album uri, no artists) degrades to a skip
         // rather than killing the page — same policy as non-track entries.

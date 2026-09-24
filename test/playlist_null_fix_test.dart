@@ -11,6 +11,9 @@
 //    uri prefix, and the map body degrades (skip) on a missing album uri or
 //    empty artists instead of throwing. A single episode used to reject the
 //    whole tracks() future, returning nothing for the playlist.
+// 4. inside the artists map, a null entry or one missing uri/profile threw
+//    the same page-wide failure (that map runs before the track-level
+//    guards) — bad artists are dropped, and a track left with none is skipped.
 //
 // The real playlist.ht runs in Hetu with the real hetu_std bytecode
 // module; only the GQL HttpClient is stubbed. Run from the package root
@@ -108,6 +111,25 @@ Map<String, dynamic> _episodeEntry(String n) => {
           'duration': {'totalMilliseconds': 3600000},
         },
       },
+    };
+
+// A well-formed track whose artists.items list is replaced verbatim by
+// [artists], so entries can be null or missing uri/profile — the shapes that
+// made the artists map throw before it was guarded.
+Map<String, dynamic> _trackWithArtists(
+  String n,
+  List<Object?> artists,
+) {
+  final entry = _trackEntry(n);
+  ((entry['itemV2'] as Map)['data'] as Map)['artists'] = {
+    'items': artists
+  };
+  return entry;
+}
+
+Map<String, dynamic> _validArtist(String n) => {
+      'uri': 'spotify:artist:va$n',
+      'profile': {'name': 'Valid Artist $n'},
     };
 
 // Runs the real playlist.ht `tracks()` over a raw items list (entries may be
@@ -297,6 +319,48 @@ fun run() {
     );
     expect(items, hasLength(1));
     expect((items[0] as Map)['name'], 'Track 6');
+  });
+
+  test('malformed artist entries are dropped, track survives', () async {
+    // The artists map ran before the track-level guards, so a null artist or
+    // one without uri/profile threw exactly like the episode case did.
+    final items = await _trackItems(
+      [
+        _trackWithArtists('11', [
+          null,
+          _validArtist('a'),
+          {'uri': 'spotify:artist:noprofile'},
+          {'profile': {'name': 'No uri'}},
+          _validArtist('b'),
+        ]),
+        _trackEntry('12'),
+      ],
+      'badartists',
+    );
+    expect(items, hasLength(2),
+        reason: 'bad artists must not cost the page a valid track');
+    final artists = (items[0] as Map)['artists'] as List;
+    expect(artists, hasLength(2));
+    expect((artists[0] as Map)['name'], 'Valid Artist a');
+    expect((artists[1] as Map)['name'], 'Valid Artist b');
+    // The album block carries the first surviving artist.
+    final albumArtists =
+        (((items[0] as Map)['album'] as Map)['artists'] as List);
+    expect(albumArtists, hasLength(1));
+    expect((albumArtists[0] as Map)['name'], 'Valid Artist a');
+  });
+
+  test('a track with no usable artists is skipped, not rendered headless',
+      () async {
+    final items = await _trackItems(
+      [
+        _trackWithArtists('13', [null, {'profile': {'name': 'No uri'}}]),
+        _trackEntry('14'),
+      ],
+      'noartistsleft',
+    );
+    expect(items, hasLength(1));
+    expect((items[0] as Map)['name'], 'Track 14');
   });
 
   test('all-valid playlist converts unchanged', () async {
