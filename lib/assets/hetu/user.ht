@@ -366,18 +366,24 @@ class SpotifyUserEndpoint {
   }
 
   fun isTracksSaved(ids: List) {
+    // `isCurated` means "Spotify has editorial metadata for this track",
+    // not "this user saved it". It answers true for most catalogue tracks,
+    // which made the heart look filled and made a click run `unsave` on a
+    // track that was never in Liked Songs. `areEntitiesInLibrary` is the
+    // actual library-membership query and its `saved` flag also works for
+    // track URIs.
     return this.gqlClient.post(
       "",
       data: {
         variables: {
           uris: ids.map((id) => "spotify:track:${id}").toList(),
         },
-        operationName: "isCurated",
+        operationName: "areEntitiesInLibrary",
         extensions: {
           persistedQuery: {
             version: 1,
             sha256Hash:
-              "e4ed1f91a2cc5415befedb85acf8671dc1a4bf3ca1a5b945a6386101a22e28a6",
+              "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed",
           },
         },
       }.toJson()
@@ -388,11 +394,13 @@ class SpotifyUserEndpoint {
         throw SpotifyError(data)
       }
 
+      // `lookup` keeps the input order and length, including a NotFound
+      // entry for an unavailable id. Never filter here: the host expects a
+      // positional bool for every id it asked about.
       var lookup = data["data"]["lookup"]
 
       return lookup
-      .where((item)=>item["data"]?["__typename"] == "Track")
-      .map((item)=>item["data"]?["isCurated"] ?? false)
+      .map((item)=>item["data"]?["saved"] ?? false)
       .toList()
     })
   }
