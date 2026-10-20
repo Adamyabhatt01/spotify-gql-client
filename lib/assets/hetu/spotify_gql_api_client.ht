@@ -14,6 +14,10 @@ var HttpBaseOptions = std.HttpBaseOptions
 class SpotifyGqlApi {
   var apiClient: HttpClient
   var gqlClient: HttpClient
+  // The web player's playlist mutations live on spclient, not on the
+  // rate-limited api.spotify.com/v1 bucket. Keeping a separate client also
+  // keeps create/add-tracks off the REST path that returns 429.
+  var spClient: HttpClient
 
   var album: SpotifyAlbumEndpoint
   var artist: SpotifyArtistEndpoint
@@ -44,11 +48,17 @@ class SpotifyGqlApi {
         headers: headers
       )
     )
+    this.spClient = HttpClient(
+      HttpBaseOptions(
+        baseUrl: "https://spclient.wg.spotify.com",
+        headers: headers
+      )
+    )
 
     this.album = SpotifyAlbumEndpoint(this.apiClient, this.gqlClient)
     this.artist = SpotifyArtistEndpoint(this.apiClient, this.gqlClient)
     this.browse = SpotifyBrowseEndpoint(this.apiClient, this.gqlClient)
-    this.playlist = SpotifyPlaylistEndpoint(this.apiClient, this.gqlClient)
+    this.playlist = SpotifyPlaylistEndpoint(this.apiClient, this.gqlClient, this.spClient)
     this.search = SpotifySearchEndpoint(this.apiClient, this.gqlClient)
     this.track = SpotifyTrackEndpoint(this.apiClient, this.gqlClient)
     this.user = SpotifyUserEndpoint(this.apiClient, this.gqlClient)

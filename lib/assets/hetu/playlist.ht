@@ -7,8 +7,9 @@ var HttpResponse = std.HttpResponse
 class SpotifyPlaylistEndpoint {
   var apiClient: HttpClient
   var gqlClient: HttpClient
+  var spClient: HttpClient
 
-  construct (this.apiClient, this.gqlClient)
+  construct (this.apiClient, this.gqlClient, this.spClient)
 
   fun getPlaylist(playlistId: string) {
     return this.gqlClient.post(
@@ -36,17 +37,22 @@ class SpotifyPlaylistEndpoint {
       }
       var playlist = data["data"]["playlistV2"]
       var owner = playlist["ownerV2"]["data"]
+      var imageItems = playlist["images"]?["items"]
+      var images = []
+      if (imageItems != null && imageItems.length > 0) {
+        images = imageItems[0]?["sources"] ?? []
+      }
 
       return {
         id: playlistId,
         collaborative: playlist["members"]["items"].length > 1,
-        description: playlist["description"],
+        description: playlist["description"] ?? "",
         external_urls: {
           spotify: "https://open.spotify.com/playlist/${playlistId}"
         },
         followers: playlist["followers"],
         name: playlist["name"],
-        images: playlist["images"]?["items"]?[0]?["sources"] ?? [],
+        images: images,
         public: true,
         owner: {
           id: owner["uri"].split(":").last,
@@ -177,13 +183,27 @@ class SpotifyPlaylistEndpoint {
   }) {
     assert(name != null && userId != null)
 
-    return this.apiClient.post(
-      "/users/${userId}/playlists",
+    // The web player creates an empty playlist through spclient with an
+    // UPDATE_LIST_ATTRIBUTES op. api.spotify.com/v1/users/{id}/playlists is
+    // the same write bucket that currently answers 429 for this account.
+    var values = { name: name }.toJson()
+    if (description != null) {
+      values["description"] = description
+    }
+
+    return this.spClient.post(
+      "/playlist/v2/playlist?format=json",
       data: {
-        name: name,
-        description: description,
-        public: public ?? false,
-        collaborative: collaborative ?? false
+        ops: [
+          {
+            kind: "UPDATE_LIST_ATTRIBUTES",
+            updateListAttributes: {
+              newAttributes: {
+                values: values
+              }
+            }
+          }
+        ]
       }.toJson()
     ).then((res: HttpResponse) {
       var data = res.data
@@ -191,8 +211,24 @@ class SpotifyPlaylistEndpoint {
       if (SpotifyError.isError(data)) {
         throw SpotifyError(data)
       }
+      if (data == null || data["uri"] == null) {
+        throw "Spotify did not return the created playlist URI"
+      }
 
-      return data
+      var uri = data["uri"]
+      var playlistId = uri.split(":").last
+
+      // spclient create does not put the new playlist in the library
+      // rootlist. Follow it first so it exists on other clients, then apply
+      // the requested visibility.
+      return this.follow(playlistId).then((_) {
+        if (public != null) {
+          return this.changePermission(userId, uri, public).then((_) {
+            return this.getPlaylist(playlistId)
+          })
+        }
+        return this.getPlaylist(playlistId)
+      })
     })
   }
 
@@ -201,29 +237,40 @@ class SpotifyPlaylistEndpoint {
     description: string,
     public: bool,
     collaborative: bool
-  }) -> void {
-    assert(name != null && playlistId != null)
+  }) {
+    assert(playlistId != null)
 
-    var data = {
-        name: name,
-        description: description,
-        public: public,
-        collaborative: collaborative
-    }.toJson()
-
-    if (description == null) {
-      data.remove("description")
+    var values = {}.toJson()
+    if (name != null) {
+      values["name"] = name
     }
-    if (public == null) {
-      data.remove("public")
-    }
-    if (collaborative == null) {
-      data.remove("collaborative")
+    if (description != null) {
+      values["description"] = description
     }
 
-    return this.apiClient.put(
-      "/playlists/${playlistId}",
-      data: data
+    return this.spClient.post(
+      "/playlist/v2/playlist/${playlistId}/changes?format=json",
+      data: {
+        deltas: [
+          {
+            ops: [
+              {
+                kind: "UPDATE_LIST_ATTRIBUTES",
+                updateListAttributes: {
+                  newAttributes: {
+                    values: values
+                  }
+                }
+              }
+            ],
+            info: {
+              source: {
+                client: "WEBPLAYER"
+              }
+            }
+          }
+        ]
+      }.toJson()
     ).then((res: HttpResponse) {
       var data = res.data
 
@@ -236,11 +283,67 @@ class SpotifyPlaylistEndpoint {
   fun addTracks(playlistId: string, {uris: List, position: int}) {
     assert(uris != null && playlistId != null)
 
-    return this.apiClient.post(
-      "/playlists/${playlistId}/tracks",
+    // GQL addToPlaylist appends to the bottom. The host does not request
+    // positional inserts today; keeping the REST v1 endpoint here would put
+    // track adds back on the 429 bucket.
+    return this.gqlClient.post(
+      "",
       data: {
-        uris: uris,
-        position: position ?? 0
+        variables: {
+          playlistItemUris: uris,
+          playlistUri: "spotify:playlist:${playlistId}",
+          newPosition: {
+            moveType: "BOTTOM_OF_PLAYLIST",
+            fromUid: null
+          }
+        },
+        operationName: "addToPlaylist",
+        extensions: {
+          persistedQuery: {
+            version: 1,
+            sha256Hash: "47b2a1234b17748d332dd0431534f22450e9ecbb3d5ddcdacbd83368636a0990"
+          }
+        }
+      }.toJson()
+    ).then((res: HttpResponse) {
+      var data = res.data
+
+      if (SpotifyError.isError(data)) {
+        throw SpotifyError(data)
+      }
+
+      return data
+    })
+  }
+
+  fun changePermission(userId: string, playlistUri: string, isPublic: bool) {
+    return this.spClient.post(
+      "/playlist/v2/user/${userId}/rootlist/changes?format=json",
+      data: {
+        deltas: [
+          {
+            ops: [
+              {
+                kind: "UPDATE_ITEM_ATTRIBUTES",
+                updateItemAttributes: {
+                  newAttributes: {
+                    values: {
+                      public: isPublic
+                    }
+                  },
+                  item: {
+                    uri: playlistUri
+                  }
+                }
+              }
+            ],
+            info: {
+              source: {
+                client: "WEBPLAYER"
+              }
+            }
+          }
+        ]
       }.toJson()
     ).then((res: HttpResponse) {
       var data = res.data
@@ -273,10 +376,19 @@ class SpotifyPlaylistEndpoint {
   }
 
   fun follow(playlistId: string) {
-    return this.apiClient.put(
-      "/playlists/${playlistId}/followers",
+    return this.gqlClient.post(
+      "",
       data: {
-        public: false
+        variables: {
+          uris: ["spotify:playlist:${playlistId}"]
+        },
+        operationName: "addItemsToRootlist",
+        extensions: {
+          persistedQuery: {
+            version: 1,
+            sha256Hash: "bd9c5cae1ee80ebca05d7ed12fd394216f49a20ce72d9dc762868df0f14522ea"
+          }
+        }
       }.toJson()
     ).then((res: HttpResponse){
       var data = res.data
@@ -288,8 +400,21 @@ class SpotifyPlaylistEndpoint {
   }
 
   fun unfollow(playlistId: string) {
-    return this.apiClient.delete_req("/playlists/${playlistId}/followers")
-    .then((res: HttpResponse){
+    return this.gqlClient.post(
+      "",
+      data: {
+        variables: {
+          uris: ["spotify:playlist:${playlistId}"]
+        },
+        operationName: "removeItemsFromRootlist",
+        extensions: {
+          persistedQuery: {
+            version: 1,
+            sha256Hash: "3422f1866532820a1d8d0560f88542dbdbd35d0377ee5ecd49593590f5f1e86b"
+          }
+        }
+      }.toJson()
+    ).then((res: HttpResponse){
       var data = res.data
       if(SpotifyError.isError(data)) {
         throw SpotifyError(data)
