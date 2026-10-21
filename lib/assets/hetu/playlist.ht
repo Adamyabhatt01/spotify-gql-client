@@ -357,7 +357,7 @@ class SpotifyPlaylistEndpoint {
   }
 
   fun removeTracks(playlistId: string, {uris: List}) {
-    assert(tracks != null && playlistId != null)
+    assert(uris != null && playlistId != null)
 
     return this.apiClient.delete_req(
       "/playlists/${playlistId}/tracks",
