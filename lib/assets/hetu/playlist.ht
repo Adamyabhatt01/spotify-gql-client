@@ -218,16 +218,50 @@ class SpotifyPlaylistEndpoint {
       var uri = data["uri"]
       var playlistId = uri.split(":").last
 
+      // The created playlist is described from the create's own answer: its
+      // id is in the URI. It is deliberately NOT read back here.
+      //
+      // The read-back was the last step of the create, so a throttled read
+      // (a 429 on this account is routine) reported the whole creation as
+      // failed — even though the playlist existed and was in the account's
+      // library. The caller then never showed it, and the user was told a
+      // playlist they already had had not been created.
+      //
+      // Hetu has no way to recover from a failed future (no catchError, no
+      // try/catch), so the only way to keep a failed read from undoing a
+      // successful create is not to make the read part of it. The caller
+      // re-reads the playlist separately when it wants the cover.
+      var created = {
+        id: playlistId,
+        name: name,
+        description: description ?? "",
+        collaborative: collaborative ?? false,
+        public: public ?? true,
+        images: [],
+        followers: 0,
+        uri: uri,
+        external_urls: {
+          spotify: "https://open.spotify.com/playlist/${playlistId}"
+        },
+        owner: {
+          id: userId,
+          display_name: userId,
+          images: [],
+          uri: "spotify:user:${userId}",
+          external_urls: {
+            spotify: "https://open.spotify.com/user/${userId}"
+          }
+        }
+      }.toJson()
+
       // spclient create does not put the new playlist in the library
       // rootlist. Follow it first so it exists on other clients, then apply
       // the requested visibility.
       return this.follow(playlistId).then((_) {
         if (public != null) {
-          return this.changePermission(userId, uri, public).then((_) {
-            return this.getPlaylist(playlistId)
-          })
+          return this.changePermission(userId, uri, public).then((_) => created)
         }
-        return this.getPlaylist(playlistId)
+        return created
       })
     })
   }
